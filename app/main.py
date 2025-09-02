@@ -2,6 +2,21 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
 from .routes import influencers_router, videos_router, analytics_router
+import os
+import subprocess
+
+# Run migrations on startup (only in production)
+if os.getenv("RAILWAY_ENVIRONMENT") or os.getenv("PORT"):  # Railway environment
+    try:
+        print("🚀 Running database migrations...")
+        result = subprocess.run(["alembic", "upgrade", "head"], 
+                              capture_output=True, text=True, cwd="/app")
+        if result.returncode == 0:
+            print("✅ Migrations completed successfully")
+        else:
+            print(f"❌ Migration failed: {result.stderr}")
+    except Exception as e:
+        print(f"⚠️ Migration error: {e}")
 
 app = FastAPI(
     title=settings.app_name,
