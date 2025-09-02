@@ -1,0 +1,8 @@
+[phases.setup]
+nixPkgs = ['nodejs', 'npm']
+
+[phases.build]
+cmds = ['cd el_dorado_frontend && npm ci && npm run build']
+
+[start]
+cmd = 'cd el_dorado_frontend && npm run preview -- --host 0.0.0.0 --port $PORT'
