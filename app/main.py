@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from .core.config import settings
-from .routes import influencers_router, videos_router, analytics_router
+from .routes import influencers_router, videos_router, analytics_router, owners_router
 import os
 import subprocess
 
@@ -36,6 +36,7 @@ app.add_middleware(
 )
 
 # Include routers
+app.include_router(owners_router)
 app.include_router(influencers_router)
 app.include_router(videos_router)
 app.include_router(analytics_router)
@@ -51,6 +52,7 @@ def root():
         "docs": "/docs",
         "health": "/health",
         "endpoints": {
+            "owners": "/api/v1/owners",
             "influencers": "/api/v1/influencers",
             "videos": "/api/v1/videos", 
             "analytics": "/api/v1/analytics"

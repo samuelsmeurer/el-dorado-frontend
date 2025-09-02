@@ -9,9 +9,37 @@ class OwnerType(str, Enum):
     alejandra = "alejandra"
     alessandro = "alessandro"
     bianca = "bianca"
+    camilo = "camilo"
     jesus = "jesus"
     julia = "julia"
     samuel = "samuel"
+
+
+# Owner Schemas
+class OwnerBase(BaseModel):
+    name: str = Field(..., min_length=1, max_length=50)
+    display_name: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    is_active: bool = True
+
+
+class OwnerCreate(OwnerBase):
+    pass
+
+
+class OwnerUpdate(BaseModel):
+    display_name: Optional[str] = Field(None, max_length=100)
+    email: Optional[str] = Field(None, max_length=255)
+    is_active: Optional[bool] = None
+
+
+class OwnerResponse(OwnerBase):
+    id: UUID
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
 
 
 # Influencer Schemas
