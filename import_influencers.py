@@ -1,128 +1,128 @@
 #!/usr/bin/env python3
+"""
+Script to import influencers from CSV file to the database
+"""
 import csv
-import requests
-import json
-from typing import List, Dict
+import sys
+import os
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from app.models.influencer import Influencer, OwnerType
+from app.core.database import Base
 
-def read_csv_data(file_path: str) -> List[Dict[str, str]]:
-    """Read influencers data from CSV file"""
-    influencers = []
-    
-    with open(file_path, 'r', encoding='utf-8') as file:
-        reader = csv.DictReader(file)
-        for row in reader:
-            influencers.append({
-                'first_name': row['Nome'],
-                'eldorado_username': row['Nome'],  # Using Nome as eldorado_username
-                'tiktok_username': row['tiktok @'],
-                'country': row['Pais'],
-                'owner': row['Owner'],
-                'phone': row['telefone'] if row['telefone'] != 'null' else None
-            })
-    
-    return influencers
+# Database configuration
+DATABASE_URL = "postgresql://postgres:postgres@localhost:5432/el_dorado_db"
 
-def create_influencer(influencer_data: Dict[str, str], api_base_url: str) -> Dict:
-    """Create an influencer using the API"""
-    url = f"{api_base_url}/api/v1/influencers/"
-    
-    # Prepare payload
-    payload = {
-        'first_name': influencer_data['first_name'],
-        'eldorado_username': influencer_data['eldorado_username'],
-        'country': influencer_data['country'],
-        'owner': influencer_data['owner']
-    }
-    
-    # Add optional fields
-    if influencer_data.get('tiktok_username'):
-        payload['tiktok_username'] = influencer_data['tiktok_username']
-    
-    if influencer_data.get('phone'):
-        payload['phone'] = influencer_data['phone']
-    
-    headers = {
-        'Content-Type': 'application/json'
-    }
+def create_db_session():
+    """Create database session"""
+    engine = create_engine(DATABASE_URL)
+    SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    return SessionLocal(), engine
+
+def import_influencers_from_csv(csv_file_path):
+    """Import influencers from CSV file"""
+    session, engine = create_db_session()
     
     try:
-        response = requests.post(url, json=payload, headers=headers)
-        response.raise_for_status()
-        return {
-            'success': True,
-            'data': response.json(),
-            'status_code': response.status_code
-        }
-    except requests.exceptions.RequestException as e:
-        return {
-            'success': False,
-            'error': str(e),
-            'status_code': response.status_code if 'response' in locals() else None,
-            'response_text': response.text if 'response' in locals() else None
-        }
+        # Read CSV file
+        with open(csv_file_path, 'r', encoding='utf-8') as file:
+            reader = csv.DictReader(file)
+            
+            imported_count = 0
+            skipped_count = 0
+            errors = []
+            
+            for row_num, row in enumerate(reader, start=2):  # Start at 2 because of header
+                try:
+                    # Clean up data
+                    nome = row['Nome'].strip()
+                    eldorado_username = row['User El dorado'].strip()
+                    tiktok_username = row['tiktok @'].strip()
+                    pais = row['Pais'].strip() if row['Pais'].strip() else None
+                    owner_str = row['Owner'].strip().lower()
+                    
+                    # Skip if essential data is missing
+                    if not nome or not eldorado_username:
+                        skipped_count += 1
+                        errors.append(f"Row {row_num}: Missing essential data (nome or eldorado_username)")
+                        continue
+                    
+                    # Check if influencer already exists
+                    existing = session.query(Influencer).filter_by(eldorado_username=eldorado_username).first()
+                    if existing:
+                        skipped_count += 1
+                        errors.append(f"Row {row_num}: Influencer {eldorado_username} already exists")
+                        continue
+                    
+                    # Validate owner
+                    try:
+                        owner_enum = OwnerType(owner_str)
+                    except ValueError:
+                        skipped_count += 1
+                        errors.append(f"Row {row_num}: Invalid owner '{owner_str}' for {eldorado_username}")
+                        continue
+                    
+                    # Create new influencer
+                    influencer = Influencer(
+                        first_name=nome,
+                        eldorado_username=eldorado_username,
+                        phone=None,  # Set as null as specified
+                        country=pais,
+                        owner=owner_enum,
+                        status="active"
+                    )
+                    
+                    session.add(influencer)
+                    imported_count += 1
+                    print(f"✅ Added: {eldorado_username} ({nome}) - Owner: {owner_str}")
+                    
+                except Exception as e:
+                    skipped_count += 1
+                    error_msg = f"Row {row_num}: Error processing {row.get('User El dorado', 'unknown')}: {str(e)}"
+                    errors.append(error_msg)
+                    print(f"❌ {error_msg}")
+                    continue
+            
+            # Commit all changes
+            session.commit()
+            print(f"\n🎉 Import completed!")
+            print(f"✅ Successfully imported: {imported_count} influencers")
+            print(f"⏭️  Skipped: {skipped_count} entries")
+            
+            if errors:
+                print(f"\n⚠️  Errors encountered:")
+                for error in errors[:10]:  # Show first 10 errors
+                    print(f"   {error}")
+                if len(errors) > 10:
+                    print(f"   ... and {len(errors) - 10} more errors")
+                    
+    except Exception as e:
+        session.rollback()
+        print(f"💥 Fatal error: {str(e)}")
+        return False
+    finally:
+        session.close()
+        
+    return True
 
-def import_all_influencers(csv_file_path: str, api_base_url: str = "http://localhost:8000"):
-    """Import all influencers from CSV to database via API"""
+def main():
+    csv_file = "/Users/samuelschramm/Downloads/influencers_limpo.csv"
     
-    print(f"Reading influencers from {csv_file_path}...")
-    influencers = read_csv_data(csv_file_path)
-    print(f"Found {len(influencers)} influencers to import")
-    
-    success_count = 0
-    error_count = 0
-    errors = []
-    
-    for i, influencer in enumerate(influencers, 1):
-        print(f"\n[{i}/{len(influencers)}] Creating influencer: {influencer['eldorado_username']}")
+    if not os.path.exists(csv_file):
+        print(f"❌ CSV file not found: {csv_file}")
+        return
         
-        result = create_influencer(influencer, api_base_url)
-        
-        if result['success']:
-            success_count += 1
-            print(f"✅ Successfully created: {influencer['eldorado_username']}")
-        else:
-            error_count += 1
-            error_msg = f"❌ Failed to create {influencer['eldorado_username']}: {result['error']}"
-            print(error_msg)
-            errors.append({
-                'influencer': influencer['eldorado_username'],
-                'error': result['error'],
-                'status_code': result.get('status_code'),
-                'response': result.get('response_text')
-            })
+    print(f"🚀 Starting import from: {csv_file}")
+    print(f"📊 Database: {DATABASE_URL}")
+    print("-" * 60)
     
-    # Summary
-    print(f"\n{'='*50}")
-    print(f"IMPORT SUMMARY")
-    print(f"{'='*50}")
-    print(f"Total influencers: {len(influencers)}")
-    print(f"Successfully created: {success_count}")
-    print(f"Failed: {error_count}")
+    success = import_influencers_from_csv(csv_file)
     
-    if errors:
-        print(f"\n{'='*50}")
-        print(f"ERRORS:")
-        print(f"{'='*50}")
-        for error in errors:
-            print(f"- {error['influencer']}: {error['error']}")
-            if error.get('response'):
-                print(f"  Response: {error['response']}")
+    if success:
+        print("\n✅ Import process completed successfully!")
+    else:
+        print("\n❌ Import process failed!")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    import sys
-    
-    # Default values
-    csv_file = "influencers_limpo.csv"
-    api_url = "http://localhost:8000"
-    
-    # Allow command line arguments
-    if len(sys.argv) > 1:
-        csv_file = sys.argv[1]
-    if len(sys.argv) > 2:
-        api_url = sys.argv[2]
-    
-    print(f"Starting import process...")
-    print(f"CSV file: {csv_file}")
-    print(f"API URL: {api_url}")
-    
-    import_all_influencers(csv_file, api_url)
+    main()
