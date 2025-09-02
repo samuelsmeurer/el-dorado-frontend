@@ -6,9 +6,12 @@ from uuid import UUID
 
 
 class OwnerType(str, Enum):
-    users = "users"
-    cellphone = "cellphone"
-    multiple = "multiple"
+    alejandra = "Alejandra"
+    alessandro = "Alessandro"
+    bianca = "Bianca"
+    jesus = "Jesus"
+    julia = "Julia"
+    samuel = "Samuel"
 
 
 # Influencer Schemas
