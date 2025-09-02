@@ -20,8 +20,8 @@ def upgrade() -> None:
     # First, convert the enum column to text to remove the constraint
     op.execute("ALTER TABLE influencers ALTER COLUMN owner TYPE text")
     
-    # Update existing data to map to new enum values
-    op.execute("UPDATE influencers SET owner = 'samuel' WHERE owner IN ('users', 'cellphone', 'multiple')")
+    # Update existing data to map to new enum values (handle both cases)
+    op.execute("UPDATE influencers SET owner = 'samuel' WHERE owner IN ('users', 'cellphone', 'multiple', 'Samuel')")
     
     # Drop the old enum type
     op.execute("DROP TYPE ownertype")
