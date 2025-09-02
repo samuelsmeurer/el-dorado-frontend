@@ -76,8 +76,9 @@ def clean_invalid_owners():
     db = next(get_db())
     try:
         # Delete records with invalid owner values
+        from sqlalchemy import text
         result = db.execute(
-            "DELETE FROM influencers WHERE owner NOT IN ('alejandra', 'alessandro', 'bianca', 'jesus', 'julia', 'samuel')"
+            text("DELETE FROM influencers WHERE owner NOT IN ('alejandra', 'alessandro', 'bianca', 'jesus', 'julia', 'samuel')")
         )
         db.commit()
         
