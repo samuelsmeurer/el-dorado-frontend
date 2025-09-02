@@ -72,21 +72,30 @@ def health_check():
 def clean_invalid_owners():
     """Emergency endpoint to clean invalid owner data"""
     from .core.database import get_db
+    from .models import Influencer
     
     db = next(get_db())
     try:
-        # Delete records with invalid owner values
-        from sqlalchemy import text
-        result = db.execute(
-            text("DELETE FROM influencers WHERE owner NOT IN ('alejandra', 'alessandro', 'bianca', 'jesus', 'julia', 'samuel')")
-        )
+        # Find all records
+        all_influencers = db.query(Influencer).all()
+        
+        # Delete records that would cause enum errors
+        deleted_count = 0
+        for influencer in all_influencers:
+            try:
+                # Try to access the owner field - this will fail if invalid
+                _ = influencer.owner
+            except:
+                # If accessing owner fails, delete this record
+                db.delete(influencer)
+                deleted_count += 1
+        
         db.commit()
         
-        count = result.rowcount
         return {
             "success": True,
-            "deleted_records": count,
-            "message": f"Deleted {count} records with invalid owner values"
+            "deleted_records": deleted_count,
+            "message": f"Deleted {deleted_count} records with invalid owner values"
         }
     except Exception as e:
         db.rollback()
