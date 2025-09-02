@@ -7,12 +7,12 @@ import enum
 
 
 class OwnerType(enum.Enum):
-    alejandra = "Alejandra"
-    alessandro = "Alessandro"
-    bianca = "Bianca"
-    jesus = "Jesus"
-    julia = "Julia"
-    samuel = "Samuel"
+    alejandra = "alejandra"
+    alessandro = "alessandro"
+    bianca = "bianca"
+    jesus = "jesus"
+    julia = "julia"
+    samuel = "samuel"
 
 
 class Influencer(Base):
