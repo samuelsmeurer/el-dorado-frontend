@@ -66,3 +66,32 @@ def health_check():
         "service": settings.app_name,
         "version": settings.version
     }
+
+
+@app.post("/admin/clean-invalid-owners")
+def clean_invalid_owners():
+    """Emergency endpoint to clean invalid owner data"""
+    from .core.database import get_db
+    
+    db = next(get_db())
+    try:
+        # Delete records with invalid owner values
+        result = db.execute(
+            "DELETE FROM influencers WHERE owner NOT IN ('alejandra', 'alessandro', 'bianca', 'jesus', 'julia', 'samuel')"
+        )
+        db.commit()
+        
+        count = result.rowcount
+        return {
+            "success": True,
+            "deleted_records": count,
+            "message": f"Deleted {count} records with invalid owner values"
+        }
+    except Exception as e:
+        db.rollback()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        db.close()
