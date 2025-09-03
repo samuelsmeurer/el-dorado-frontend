@@ -1,6 +1,29 @@
-# 🚀 El Dorado Influencer API
+# 🚀 El Dorado Influencer System
 
 Sistema completo de gerenciamento de vídeos patrocinados de influenciadores da El Dorado, com integração automatizada ao TikTok via RapidAPI ScrapTik.
+
+## 📁 Estrutura de Repositórios
+
+Este projeto está dividido em **dois repositórios separados**:
+
+### 🖥️ **Backend API** (Este repositório)
+- **Repositório**: `@el_dorado_api`
+- **Tecnologia**: FastAPI + PostgreSQL
+- **Deploy**: Railway Backend Service
+- **URL**: https://el-dorado-api-production.up.railway.app
+- **Funcionalidades**: API REST, AI Assistant, Analytics, Transcrições
+
+### 🎨 **Frontend Dashboard** (Repositório separado) 
+- **Repositório**: `@el_dorado_frontend`
+- **Tecnologia**: React + Vite + TailwindCSS  
+- **Deploy**: Railway Frontend Service
+- **URL**: https://eldorado-frontend-production.up.railway.app
+- **Funcionalidades**: Dashboard, AI Chat Interface, Analytics UI
+
+### 🤖 **AI Assistant Integration**
+- **Backend**: Endpoints `/api/v1/ai-assistant/` com GPT-4
+- **Frontend**: Interface de chat com acesso aos dados
+- **Funcionalidades**: Chat natural, busca de transcrições, analytics inteligente
 
 ## 📋 Visão Geral
 
