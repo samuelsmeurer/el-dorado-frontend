@@ -334,11 +334,17 @@ def transcribe_video_from_url(
         try:
             # Try multiple URLs in order: primary, alt1, alt2
             transcription = None
-            urls_to_try = [
-                ("primary", video.watermark_free_url),
-                ("alt1", video.watermark_free_url_alt1), 
-                ("alt2", video.watermark_free_url_alt2)
-            ]
+            urls_to_try = [("primary", video.watermark_free_url)]
+            
+            # Add alternative URLs if they exist (columns may not exist yet)
+            try:
+                if hasattr(video, 'watermark_free_url_alt1') and video.watermark_free_url_alt1:
+                    urls_to_try.append(("alt1", video.watermark_free_url_alt1))
+                if hasattr(video, 'watermark_free_url_alt2') and video.watermark_free_url_alt2:
+                    urls_to_try.append(("alt2", video.watermark_free_url_alt2))
+            except Exception as e:
+                print(f"[DEBUG] Colunas alternativas ainda não existem: {e}")
+                print(f"[DEBUG] Usando apenas URL principal por enquanto")
             
             last_error = None
             for url_type, video_url in urls_to_try:
