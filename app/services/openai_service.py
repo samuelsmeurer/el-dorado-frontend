@@ -14,7 +14,15 @@ class OpenAIService:
     def download_video(self, video_url: str) -> str:
         """Download video to temporary file and return file path"""
         try:
-            response = requests.get(video_url, stream=True, timeout=30)
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'video/mp4,video/*,*/*;q=0.9',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            response = requests.get(video_url, stream=True, timeout=120, headers=headers)
             response.raise_for_status()
             
             # Create temporary file
@@ -50,8 +58,16 @@ class OpenAIService:
     def transcribe_from_url_streaming(self, video_url: str) -> str:
         """Stream video directly to OpenAI without saving to disk"""
         try:
-            # Download video to memory
-            response = requests.get(video_url, timeout=60)
+            # Download video to memory with proper headers
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                'Accept': 'video/mp4,video/*,*/*;q=0.9',
+                'Accept-Language': 'en-US,en;q=0.9',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1'
+            }
+            response = requests.get(video_url, timeout=120, headers=headers)
             response.raise_for_status()
             
             # Create a file-like object from bytes
