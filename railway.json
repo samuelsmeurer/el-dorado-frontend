@@ -1,7 +1,7 @@
 {
   "build": {
     "builder": "NIXPACKS",
-    "buildCommand": "cd el_dorado_api && pip install -r requirements.txt"
+    "buildCommand": "cd el_dorado_frontend && npm install && npm run build && cd ../el_dorado_api && pip install -r requirements.txt"
   },
   "deploy": {
     "startCommand": "cd el_dorado_api && python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT",

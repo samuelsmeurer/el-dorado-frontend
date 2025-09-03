@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .routes import influencers_router, videos_router, analytics_router, owners_router, ai_assistant_router
 import os
@@ -42,9 +43,8 @@ app.include_router(videos_router)
 app.include_router(analytics_router)
 app.include_router(ai_assistant_router)
 
-
-@app.get("/")
-def root():
+@app.get("/api")
+def api_root():
     """API root endpoint with basic information"""
     return {
         "service": settings.app_name,
@@ -98,3 +98,9 @@ def reset_database():
         }
     finally:
         db.close()
+
+
+# Serve static files from frontend build (must be last)
+frontend_dist_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "el_dorado_frontend", "dist")
+if os.path.exists(frontend_dist_path):
+    app.mount("/", StaticFiles(directory=frontend_dist_path, html=True), name="frontend")
