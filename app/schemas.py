@@ -148,16 +148,16 @@ class DashboardStats(BaseModel):
     videos_this_month: int
 
 
-# Transcription Schemas
+# Video Transcription Schemas
 class VideoTranscriptionRequest(BaseModel):
-    tiktok_url: str = Field(..., description="URL do vídeo do TikTok")
+    tiktok_url: str = Field(..., min_length=1, description="TikTok video URL")
 
 
 class VideoTranscriptionResponse(BaseModel):
     success: bool
     message: str
-    video_found: bool = False
-    is_influencer_video: bool = False
+    video_found: Optional[bool] = None
+    is_influencer_video: Optional[bool] = None
     eldorado_username: Optional[str] = None
     transcription: Optional[str] = None
     video_info: Optional[TikTokVideoResponse] = None

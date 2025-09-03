@@ -5,7 +5,7 @@ from typing import List
 from ..core.database import get_db
 from ..models import Influencer, InfluencerIds, TikTokVideo
 from ..schemas import TikTokVideoResponse, VideoSyncResponse, VideoTranscriptionRequest, VideoTranscriptionResponse
-from ..services import ScrapTikService, OpenAIService
+from ..services import ScrapTikService, OpenAIService, URLExpander
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
@@ -258,28 +258,21 @@ def transcribe_video_from_url(
                 message="URL inválida. Forneça uma URL válida do TikTok."
             )
         
-        # Try to extract video ID from URL
-        video_id = None
+        # Expand URL if it's a short URL and extract video ID
+        print(f"[DEBUG] Original URL: {tiktok_url}")
         
-        # Handle short URLs like vm.tiktok.com/ZMAMrJJN6/
-        if "vm.tiktok.com/" in tiktok_url:
-            # Extract the short ID from vm.tiktok.com
-            short_id = tiktok_url.split("vm.tiktok.com/")[-1].rstrip("/").split("?")[0]
-            
-            # For now, we'll skip the API call and go directly to database search
-            # The ScrapTik video-info endpoint might not be available
-            video_id = short_id  # Use short ID for database search
-                
-        # Handle full URLs like www.tiktok.com/@username/video/12345
-        elif "/video/" in tiktok_url:
-            video_id = tiktok_url.split("/video/")[-1].split("?")[0].split("/")[0]
-        elif "@" in tiktok_url and "/video/" in tiktok_url:
-            video_id = tiktok_url.split("/video/")[-1].split("?")[0]
+        # Expand short URLs to full URLs
+        expanded_url = URLExpander.expand_tiktok_url(tiktok_url)
+        print(f"[DEBUG] Expanded URL: {expanded_url}")
+        
+        # Extract video ID from expanded URL
+        video_id = URLExpander.extract_video_id_from_url(expanded_url)
+        print(f"[DEBUG] Extracted video ID: {video_id}")
         
         if not video_id:
             return VideoTranscriptionResponse(
                 success=False,
-                message="Não foi possível extrair o ID do vídeo da URL fornecida. Tente usar uma URL completa do TikTok."
+                message="Não foi possível extrair o ID do vídeo da URL fornecida. Tente usar uma URL válida do TikTok."
             )
         
         # Search for video in database using public_video_url

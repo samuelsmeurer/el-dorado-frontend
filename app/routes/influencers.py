@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/v1/influencers", tags=["influencers"])
 @router.get("/", response_model=List[InfluencerResponse])
 def list_influencers(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 1000,
     db: Session = Depends(get_db)
 ):
     """List all influencers with pagination"""
