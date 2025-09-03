@@ -66,14 +66,14 @@ def sync_all_influencers_videos(
                 InfluencerIds.eldorado_username == influencer.eldorado_username
             ).first()
             
-            if not influencer_ids or not influencer_ids.tiktok_username:
+            if not influencer_ids or not influencer_ids.tiktok_username or not influencer_ids.tiktok_id:
                 results.append(VideoSyncResponse(
                     success=False,
-                    message=f"No TikTok username for {influencer.eldorado_username}",
+                    message=f"Skipping {influencer.eldorado_username} - Missing TikTok data",
                     videos_processed=0,
                     new_videos=0,
                     updated_videos=0,
-                    errors=[f"Missing TikTok username"]
+                    errors=[f"Missing TikTok username or ID - use /sync-tiktok-id first"]
                 ))
                 continue
             
@@ -171,17 +171,12 @@ def sync_influencer_videos(
             detail=f"No TikTok username found for '{eldorado_username}'"
         )
     
-    # Ensure we have TikTok ID
+    # Skip if no TikTok ID (avoid unnecessary API calls)
     if not influencer_ids.tiktok_id:
-        scraptik = ScrapTikService()
-        tiktok_id = scraptik.get_user_id_from_username(influencer_ids.tiktok_username)
-        if not tiktok_id:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Could not fetch TikTok ID for '{influencer_ids.tiktok_username}'"
-            )
-        influencer_ids.tiktok_id = tiktok_id
-        db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"No TikTok ID found for '{eldorado_username}'. Please sync TikTok ID first using /sync-tiktok-id endpoint."
+        )
     
     # Get sponsored videos using ScrapTik
     scraptik = ScrapTikService()
