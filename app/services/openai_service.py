@@ -37,22 +37,29 @@ class OpenAIService:
     def transcribe_video(self, video_path: str) -> str:
         """Transcribe video using OpenAI Whisper API"""
         try:
+            print(f"[DEBUG] Opening file for transcription: {video_path}")
             with open(video_path, "rb") as audio_file:
+                print(f"[DEBUG] Sending to OpenAI Whisper...")
                 transcription = self.client.audio.transcriptions.create(
                     model="whisper-1",
                     file=audio_file,
                     language="pt"  # Portuguese
                 )
+                print(f"[DEBUG] OpenAI response received")
             return transcription.text
             
         except Exception as e:
+            print(f"[DEBUG] Transcription error: {str(e)}")
             raise Exception(f"Erro na transcrição: {str(e)}")
         finally:
             # Clean up temporary file
+            print(f"[DEBUG] Cleaning up temp file: {video_path}")
             if os.path.exists(video_path):
                 try:
                     os.unlink(video_path)
-                except:
+                    print(f"[DEBUG] Temp file deleted successfully")
+                except Exception as cleanup_error:
+                    print(f"[DEBUG] Failed to delete temp file: {cleanup_error}")
                     pass
     
     def transcribe_from_url_streaming(self, video_url: str) -> str:
