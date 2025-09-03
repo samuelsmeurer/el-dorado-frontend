@@ -23,5 +23,9 @@ COPY . .
 # Expose port
 EXPOSE 8000
 
+# Make start script executable and use it
+COPY start.sh .
+RUN chmod +x start.sh
+
 # Start the application
-CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port $PORT"]
+CMD ["./start.sh"]
