@@ -63,3 +63,6 @@ htmlcov/
 
 # Railway
 .railway/
+
+# Frontend (deployed separately)
+el_dorado_frontend/
