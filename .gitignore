@@ -64,5 +64,6 @@ htmlcov/
 # Railway
 .railway/
 
-# Frontend (deployed separately)
-el_dorado_frontend/
+# Node modules (but not the frontend itself)
+el_dorado_frontend/node_modules/
+el_dorado_frontend/dist/
