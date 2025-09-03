@@ -1,6 +1,7 @@
 import os
 import tempfile
 import requests
+import subprocess
 from openai import OpenAI
 from typing import Optional
 from ..core.config import settings
@@ -10,6 +11,7 @@ import io
 class OpenAIService:
     def __init__(self):
         self.client = OpenAI(api_key=settings.openai_api_key)
+        self.max_file_size = 25 * 1024 * 1024  # 25MB limit for OpenAI
     
     def download_video(self, video_url: str) -> str:
         """Download video to temporary file and return file path"""
@@ -33,6 +35,84 @@ class OpenAIService:
                 
         except Exception as e:
             raise Exception(f"Erro ao baixar vídeo: {str(e)}")
+    
+    def compress_video_if_needed(self, video_path: str) -> str:
+        """Compress video if it's larger than 25MB using FFmpeg"""
+        try:
+            file_size = os.path.getsize(video_path)
+            print(f"[DEBUG] Original file size: {file_size} bytes ({file_size / (1024*1024):.1f}MB)")
+            
+            if file_size <= self.max_file_size:
+                print("[DEBUG] File size OK, no compression needed")
+                return video_path
+                
+            print("[DEBUG] File too large, compressing...")
+            
+            # Create compressed output file
+            compressed_path = video_path.replace('.mp4', '_compressed.mp4')
+            
+            # FFmpeg compression command
+            # Reduce bitrate to target approximately 20MB (leaving some margin)
+            target_bitrate = int((self.max_file_size * 0.8 * 8) / 60)  # Assuming ~60 second videos
+            
+            cmd = [
+                'ffmpeg', 
+                '-i', video_path,
+                '-c:v', 'libx264',           # Video codec
+                '-b:v', f'{target_bitrate}k', # Target bitrate
+                '-c:a', 'aac',               # Audio codec  
+                '-b:a', '64k',               # Audio bitrate
+                '-movflags', '+faststart',    # Optimize for streaming
+                '-y',                        # Overwrite output file
+                compressed_path
+            ]
+            
+            print(f"[DEBUG] Running FFmpeg compression: {' '.join(cmd)}")
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode != 0:
+                print(f"[DEBUG] FFmpeg failed: {result.stderr}")
+                print("[DEBUG] Falling back to original file")
+                return video_path
+                
+            compressed_size = os.path.getsize(compressed_path)
+            print(f"[DEBUG] Compressed file size: {compressed_size} bytes ({compressed_size / (1024*1024):.1f}MB)")
+            
+            if compressed_size > self.max_file_size:
+                print("[DEBUG] Compression didn't reduce size enough, trying audio extraction")
+                # Try extracting only audio as last resort
+                audio_path = video_path.replace('.mp4', '.mp3')
+                audio_cmd = [
+                    'ffmpeg',
+                    '-i', video_path,
+                    '-vn',  # No video
+                    '-c:a', 'mp3',
+                    '-b:a', '64k',
+                    '-y',
+                    audio_path
+                ]
+                
+                audio_result = subprocess.run(audio_cmd, capture_output=True, text=True, timeout=300)
+                if audio_result.returncode == 0:
+                    audio_size = os.path.getsize(audio_path)
+                    print(f"[DEBUG] Audio-only file size: {audio_size} bytes ({audio_size / (1024*1024):.1f}MB)")
+                    
+                    # Clean up compressed video file
+                    if os.path.exists(compressed_path):
+                        os.unlink(compressed_path)
+                    return audio_path
+            
+            # Clean up original file and return compressed version
+            if os.path.exists(video_path):
+                os.unlink(video_path)
+            return compressed_path
+            
+        except subprocess.TimeoutExpired:
+            print("[DEBUG] FFmpeg timeout, using original file")
+            return video_path
+        except Exception as e:
+            print(f"[DEBUG] Compression failed: {str(e)}, using original file")
+            return video_path
     
     def transcribe_video(self, video_path: str) -> str:
         """Transcribe video using OpenAI Whisper API"""
@@ -102,9 +182,13 @@ class OpenAIService:
             video_path = self.download_video(video_url)
             print(f"[DEBUG] Downloaded to: {video_path}, size: {os.path.getsize(video_path)} bytes")
             
-            # Transcribe from downloaded file
+            # Compress video if needed (>25MB)
+            print(f"[DEBUG] Checking if compression is needed...")
+            compressed_path = self.compress_video_if_needed(video_path)
+            
+            # Transcribe from downloaded/compressed file
             print(f"[DEBUG] Starting transcription...")
-            result = self.transcribe_video(video_path)
+            result = self.transcribe_video(compressed_path)
             print(f"[DEBUG] Transcription successful, length: {len(result)} chars")
             return result
             
