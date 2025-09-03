@@ -127,8 +127,19 @@ class ScrapTikService:
                     download_url = url_list[0] if len(url_list) > 0 else None
                     download_url_alt1 = url_list[1] if len(url_list) > 1 else None
                     download_url_alt2 = url_list[2] if len(url_list) > 2 else None
+                    
+                    # Log URLs capturadas
+                    print(f"[DEBUG] Video {video_id}: Capturados {len(url_list)} URLs")
+                    if download_url:
+                        print(f"[DEBUG] URL Principal: {download_url[:50]}...")
+                    if download_url_alt1:
+                        print(f"[DEBUG] URL Alt1: {download_url_alt1[:50]}...")
+                    if download_url_alt2:
+                        print(f"[DEBUG] URL Alt2: {download_url_alt2[:50]}...")
+                        
                 elif 'download_addr' in video_urls:
                     download_url = video_urls.get('download_addr')
+                    print(f"[DEBUG] Video {video_id}: Usando download_addr")
                 
                 # Web URL for public access
                 web_url = video.get('share_url') or f"https://www.tiktok.com/@{video.get('author', {}).get('unique_id', '')}/video/{video_id}"

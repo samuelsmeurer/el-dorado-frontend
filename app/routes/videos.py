@@ -92,10 +92,17 @@ def sync_all_influencers_videos(
                     ).first()
                     
                     if existing_video:
+                        # Update metrics
                         existing_video.view_count = video_data['view_count']
                         existing_video.like_count = video_data['like_count']
                         existing_video.comment_count = video_data['comment_count']
                         existing_video.share_count = video_data['share_count']
+                        
+                        # Always update URLs (they might have changed)
+                        existing_video.public_video_url = video_data['public_video_url']
+                        existing_video.watermark_free_url = video_data['watermark_free_url']
+                        existing_video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
+                        existing_video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
                         updated_videos += 1
                     else:
                         new_video = TikTokVideo(
