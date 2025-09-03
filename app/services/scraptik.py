@@ -122,14 +122,15 @@ class ScrapTikService:
                 download_url_alt1 = None
                 download_url_alt2 = None
                 
-                if 'play_addr' in video_urls:
-                    url_list = video_urls['play_addr'].get('url_list', [])
+                # Try to get URLs from download_no_watermark_addr first (ScrapTik API)
+                if 'download_no_watermark_addr' in video_urls:
+                    url_list = video_urls['download_no_watermark_addr'].get('url_list', [])
                     download_url = url_list[0] if len(url_list) > 0 else None
                     download_url_alt1 = url_list[1] if len(url_list) > 1 else None
                     download_url_alt2 = url_list[2] if len(url_list) > 2 else None
                     
                     # Log URLs capturadas
-                    print(f"[DEBUG] Video {video_id}: Capturados {len(url_list)} URLs")
+                    print(f"[DEBUG] Video {video_id}: Capturados {len(url_list)} URLs do download_no_watermark_addr")
                     if download_url:
                         print(f"[DEBUG] URL Principal: {download_url[:50]}...")
                     if download_url_alt1:
@@ -137,9 +138,19 @@ class ScrapTikService:
                     if download_url_alt2:
                         print(f"[DEBUG] URL Alt2: {download_url_alt2[:50]}...")
                         
+                # Fallback to play_addr if download_no_watermark_addr not available
+                elif 'play_addr' in video_urls:
+                    url_list = video_urls['play_addr'].get('url_list', [])
+                    download_url = url_list[0] if len(url_list) > 0 else None
+                    download_url_alt1 = url_list[1] if len(url_list) > 1 else None
+                    download_url_alt2 = url_list[2] if len(url_list) > 2 else None
+                    
+                    print(f"[DEBUG] Video {video_id}: Capturados {len(url_list)} URLs do play_addr")
+                        
+                # Last resort: download_addr
                 elif 'download_addr' in video_urls:
                     download_url = video_urls.get('download_addr')
-                    print(f"[DEBUG] Video {video_id}: Usando download_addr")
+                    print(f"[DEBUG] Video {video_id}: Usando download_addr simples")
                 
                 # Web URL for public access
                 web_url = video.get('share_url') or f"https://www.tiktok.com/@{video.get('author', {}).get('unique_id', '')}/video/{video_id}"
