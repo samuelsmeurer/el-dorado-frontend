@@ -328,7 +328,52 @@ def transcribe_video_from_url(
         openai_service = OpenAIService()
         
         try:
-            transcription = openai_service.transcribe_from_url(video.watermark_free_url)
+            # First try with stored URL
+            transcription = None
+            video_url_to_use = video.watermark_free_url
+            
+            try:
+                transcription = openai_service.transcribe_from_url(video_url_to_use)
+            except Exception as first_error:
+                # If we get 403, sync videos to get fresh URLs
+                if "403" in str(first_error):
+                    print(f"[DEBUG] Erro 403 com URL armazenada, sincronizando vídeos...")
+                    
+                    try:
+                        # Call sync videos for this influencer
+                        from ..services.tiktok_service import TikTokService
+                        tiktok_service = TikTokService()
+                        
+                        # Sync videos for this influencer
+                        sync_result = tiktok_service.sync_videos_for_influencer(video.eldorado_username)
+                        print(f"[DEBUG] Sync concluído: {sync_result}")
+                        
+                        # Refresh video from database to get updated URL
+                        db.refresh(video)
+                        
+                        if video.watermark_free_url != video_url_to_use:
+                            print(f"[DEBUG] URL atualizada, tentando novamente...")
+                            transcription = openai_service.transcribe_from_url(video.watermark_free_url)
+                        else:
+                            # URL didn't change, try with fresh URL extraction
+                            fresh_url = openai_service.get_fresh_video_url(video.public_video_url)
+                            if fresh_url:
+                                print(f"[DEBUG] Tentando com URL extraída da página...")
+                                transcription = openai_service.transcribe_from_url(fresh_url)
+                            else:
+                                raise Exception("URLs expiraram. Tente novamente em alguns minutos.")
+                        
+                    except Exception as sync_error:
+                        print(f"[DEBUG] Erro na sincronização: {sync_error}")
+                        # Last resort: try extracting fresh URL from page
+                        fresh_url = openai_service.get_fresh_video_url(video.public_video_url)
+                        if fresh_url:
+                            print(f"[DEBUG] Tentando com URL extraída da página...")
+                            transcription = openai_service.transcribe_from_url(fresh_url)
+                        else:
+                            raise Exception("URLs expiraram e não foi possível sincronizar. Tente novamente em alguns minutos.")
+                else:
+                    raise first_error
             
             # Save transcription to database
             video.transcription = transcription

@@ -2,6 +2,7 @@ import os
 import tempfile
 import requests
 import subprocess
+import re
 from openai import OpenAI
 from typing import Optional
 from ..core.config import settings
@@ -18,6 +19,50 @@ class OpenAIService:
     def __init__(self):
         self.client = OpenAI(api_key=settings.openai_api_key)
         self.max_file_size = 25 * 1024 * 1024  # 25MB limit for OpenAI
+    
+    def get_fresh_video_url(self, tiktok_url: str) -> str:
+        """Get a fresh video URL from TikTok page"""
+        try:
+            print(f"[DEBUG] Buscando URL fresco para: {tiktok_url}")
+            
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+            }
+            
+            response = requests.get(tiktok_url, headers=headers, timeout=30)
+            response.raise_for_status()
+            
+            # Look for video URLs in the page source
+            content = response.text
+            
+            # Pattern to match TikTok CDN video URLs
+            video_patterns = [
+                r'"downloadAddr":"([^"]*tiktokcdn[^"]*\.mp4[^"]*)"',
+                r'"playAddr":"([^"]*tiktokcdn[^"]*\.mp4[^"]*)"',
+                r'src="([^"]*tiktokcdn[^"]*\.mp4[^"]*)"',
+                r'video[^>]*src="([^"]*)"'
+            ]
+            
+            for pattern in video_patterns:
+                matches = re.findall(pattern, content)
+                for match in matches:
+                    # Clean up URL (remove escaping)
+                    clean_url = match.replace('\\u002F', '/').replace('\\/', '/')
+                    if 'tiktokcdn' in clean_url and '.mp4' in clean_url:
+                        print(f"[DEBUG] URL fresco encontrado: {clean_url[:100]}...")
+                        return clean_url
+            
+            print("[DEBUG] Nenhum URL de vídeo encontrado na página")
+            return None
+            
+        except Exception as e:
+            print(f"[DEBUG] Erro ao buscar URL fresco: {str(e)}")
+            return None
     
     def download_video(self, video_url: str) -> str:
         """Download video to temporary file and return file path"""
