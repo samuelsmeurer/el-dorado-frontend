@@ -90,17 +90,24 @@ class OpenAIService:
         """Download video to disk and transcribe (more reliable than streaming)"""
         video_path = None
         try:
+            print(f"[DEBUG] Starting download from: {video_url}")
             # Download video to temporary file
             video_path = self.download_video(video_url)
+            print(f"[DEBUG] Downloaded to: {video_path}, size: {os.path.getsize(video_path)} bytes")
             
             # Transcribe from downloaded file
-            return self.transcribe_video(video_path)
+            print(f"[DEBUG] Starting transcription...")
+            result = self.transcribe_video(video_path)
+            print(f"[DEBUG] Transcription successful, length: {len(result)} chars")
+            return result
             
         except Exception as e:
+            print(f"[DEBUG] Error occurred: {str(e)}")
             # Clean up in case of error
             if video_path and os.path.exists(video_path):
                 try:
                     os.unlink(video_path)
+                    print(f"[DEBUG] Cleaned up temp file: {video_path}")
                 except:
                     pass
             raise Exception(f"Erro no download e transcrição: {str(e)}")
