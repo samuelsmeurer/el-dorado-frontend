@@ -24,6 +24,9 @@ class TikTokVideo(Base):
     public_video_url = Column(String(1000))
     watermark_free_url = Column(String(1000))
     
+    # Transcrição
+    transcription = Column(Text, nullable=True)
+    
     # Timestamps
     published_at = Column(DateTime(timezone=True))
     created_at = Column(DateTime(timezone=True), server_default=func.now())

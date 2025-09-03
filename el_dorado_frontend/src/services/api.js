@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-const API_BASE_URL = 'https://influencer-eldorado.up.railway.app/api/v1'
+const API_BASE_URL = 'http://localhost:8000/api/v1'
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -40,8 +40,11 @@ export const videosAPI = {
   // Get videos by influencer
   getByInfluencer: (username, params = {}) => api.get(`/videos/influencer/${username}`, { params }),
   
-  // Sync videos from TikTok
+  // Sync videos from TikTok for specific influencer
   syncVideos: (username) => api.post(`/videos/sync/${username}`),
+  
+  // Sync videos for all influencers
+  syncAllVideos: () => api.post('/videos/sync/all'),
 }
 
 export const analyticsAPI = {

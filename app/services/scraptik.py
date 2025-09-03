@@ -148,6 +148,47 @@ class ScrapTikService:
         
         return sponsored_videos
     
+    def get_video_info_by_url(self, video_url: str) -> Optional[Dict[str, Any]]:
+        """
+        Get video information from a TikTok URL (including short URLs)
+        
+        Args:
+            video_url: TikTok video URL (full or short)
+            
+        Returns:
+            Video information dict with tiktok_video_id, or None if error
+        """
+        url = f"https://{settings.rapidapi_host}/video-info"
+        params = {"video_url": video_url}
+        
+        try:
+            response = requests.get(url, headers=self.headers, params=params, timeout=30)
+            response.raise_for_status()
+            result = response.json()
+            
+            # Extract video ID from different response formats
+            video_id = None
+            if 'aweme_id' in result:
+                video_id = result['aweme_id']
+            elif 'data' in result and 'aweme_id' in result['data']:
+                video_id = result['data']['aweme_id']
+            elif 'id' in result:
+                video_id = result['id']
+            elif 'video_id' in result:
+                video_id = result['video_id']
+            
+            if video_id:
+                return {'tiktok_video_id': str(video_id)}
+            else:
+                return None
+                
+        except requests.RequestException as e:
+            print(f"Error getting video info for {video_url}: {e}")
+            return None
+        except Exception as e:
+            print(f"Unexpected error getting video info: {e}")
+            return None
+
     def get_eldorado_videos(self, username: str) -> List[Dict[str, Any]]:
         """
         Complete pipeline: username → user_id → posts → filter El Dorado videos

@@ -5,6 +5,8 @@ import Navbar from './components/Navbar'
 import Dashboard from './pages/Dashboard'
 import Influencers from './pages/Influencers'
 import Analytics from './pages/Analytics'
+import Hashtags from './pages/Hashtags'
+import VideoTranscription from './pages/VideoTranscription'
 
 function App() {
   return (
@@ -16,6 +18,8 @@ function App() {
             <Route path="/" element={<Dashboard />} />
             <Route path="/influencers" element={<Influencers />} />
             <Route path="/analytics" element={<Analytics />} />
+            <Route path="/hashtags" element={<Hashtags />} />
+            <Route path="/transcription" element={<VideoTranscription />} />
           </Routes>
         </main>
         <Toaster position="top-right" />

@@ -102,6 +102,7 @@ class TikTokVideoResponse(BaseModel):
     share_count: int
     public_video_url: Optional[str] = None
     watermark_free_url: Optional[str] = None
+    transcription: Optional[str] = None
     published_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
@@ -145,3 +146,18 @@ class DashboardStats(BaseModel):
     total_likes: int
     avg_engagement_rate: float
     videos_this_month: int
+
+
+# Transcription Schemas
+class VideoTranscriptionRequest(BaseModel):
+    tiktok_url: str = Field(..., description="URL do vídeo do TikTok")
+
+
+class VideoTranscriptionResponse(BaseModel):
+    success: bool
+    message: str
+    video_found: bool = False
+    is_influencer_video: bool = False
+    eldorado_username: Optional[str] = None
+    transcription: Optional[str] = None
+    video_info: Optional[TikTokVideoResponse] = None

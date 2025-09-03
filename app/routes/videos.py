@@ -4,8 +4,8 @@ from sqlalchemy import desc
 from typing import List
 from ..core.database import get_db
 from ..models import Influencer, InfluencerIds, TikTokVideo
-from ..schemas import TikTokVideoResponse, VideoSyncResponse
-from ..services import ScrapTikService
+from ..schemas import TikTokVideoResponse, VideoSyncResponse, VideoTranscriptionRequest, VideoTranscriptionResponse
+from ..services import ScrapTikService, OpenAIService
 
 router = APIRouter(prefix="/api/v1/videos", tags=["videos"])
 
@@ -44,6 +44,102 @@ def get_video(
         )
     
     return video
+
+
+@router.post("/sync/all", response_model=List[VideoSyncResponse])
+def sync_all_influencers_videos(
+    db: Session = Depends(get_db)
+):
+    """Sync sponsored videos for all active influencers"""
+    
+    # Get all active influencers
+    active_influencers = db.query(Influencer).filter(
+        Influencer.status == "active"
+    ).all()
+    
+    results = []
+    
+    for influencer in active_influencers:
+        try:
+            # Use the single influencer sync endpoint logic
+            influencer_ids = db.query(InfluencerIds).filter(
+                InfluencerIds.eldorado_username == influencer.eldorado_username
+            ).first()
+            
+            if not influencer_ids or not influencer_ids.tiktok_username:
+                results.append(VideoSyncResponse(
+                    success=False,
+                    message=f"No TikTok username for {influencer.eldorado_username}",
+                    videos_processed=0,
+                    new_videos=0,
+                    updated_videos=0,
+                    errors=[f"Missing TikTok username"]
+                ))
+                continue
+            
+            # Sync videos for this influencer
+            scraptik = ScrapTikService()
+            sponsored_videos = scraptik.get_eldorado_videos(influencer_ids.tiktok_username)
+            
+            new_videos = 0
+            updated_videos = 0
+            errors = []
+            
+            for video_data in sponsored_videos:
+                try:
+                    existing_video = db.query(TikTokVideo).filter(
+                        TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
+                    ).first()
+                    
+                    if existing_video:
+                        existing_video.view_count = video_data['view_count']
+                        existing_video.like_count = video_data['like_count']
+                        existing_video.comment_count = video_data['comment_count']
+                        existing_video.share_count = video_data['share_count']
+                        updated_videos += 1
+                    else:
+                        new_video = TikTokVideo(
+                            eldorado_username=influencer.eldorado_username,
+                            tiktok_username=influencer_ids.tiktok_username,
+                            tiktok_video_id=video_data['tiktok_video_id'],
+                            description=video_data['description'],
+                            view_count=video_data['view_count'],
+                            like_count=video_data['like_count'],
+                            comment_count=video_data['comment_count'],
+                            share_count=video_data['share_count'],
+                            public_video_url=video_data['public_video_url'],
+                            watermark_free_url=video_data['watermark_free_url'],
+                            published_at=video_data['published_at']
+                        )
+                        db.add(new_video)
+                        new_videos += 1
+                        
+                except Exception as e:
+                    errors.append(f"Video {video_data.get('tiktok_video_id', 'unknown')}: {str(e)}")
+            
+            db.commit()
+            
+            results.append(VideoSyncResponse(
+                success=True,
+                message=f"Sync completed for {influencer.eldorado_username}",
+                videos_processed=len(sponsored_videos),
+                new_videos=new_videos,
+                updated_videos=updated_videos,
+                errors=errors
+            ))
+            
+        except Exception as e:
+            db.rollback()
+            results.append(VideoSyncResponse(
+                success=False,
+                message=f"Error syncing {influencer.eldorado_username}: {str(e)}",
+                videos_processed=0,
+                new_videos=0,
+                updated_videos=0,
+                errors=[str(e)]
+            ))
+    
+    return results
 
 
 @router.post("/sync/{eldorado_username}", response_model=VideoSyncResponse)
@@ -149,97 +245,128 @@ def sync_influencer_videos(
     )
 
 
-@router.post("/sync/all", response_model=List[VideoSyncResponse])
-def sync_all_influencers_videos(
+@router.post("/transcribe", response_model=VideoTranscriptionResponse)
+def transcribe_video_from_url(
+    request: VideoTranscriptionRequest,
     db: Session = Depends(get_db)
 ):
-    """Sync sponsored videos for all active influencers"""
+    """Transcribe TikTok video from URL using OpenAI Whisper"""
     
-    # Get all active influencers
-    active_influencers = db.query(Influencer).filter(
-        Influencer.status == "active"
-    ).all()
-    
-    results = []
-    
-    for influencer in active_influencers:
-        try:
-            # Use the single influencer sync endpoint logic
-            influencer_ids = db.query(InfluencerIds).filter(
-                InfluencerIds.eldorado_username == influencer.eldorado_username
+    try:
+        # Extract video ID from TikTok URL
+        tiktok_url = request.tiktok_url.strip()
+        
+        # Basic URL validation
+        if not tiktok_url or not ("tiktok.com" in tiktok_url or "vm.tiktok.com" in tiktok_url):
+            return VideoTranscriptionResponse(
+                success=False,
+                message="URL inválida. Forneça uma URL válida do TikTok."
+            )
+        
+        # Try to extract video ID from URL
+        video_id = None
+        
+        # Handle short URLs like vm.tiktok.com/ZMAMrJJN6/
+        if "vm.tiktok.com/" in tiktok_url:
+            # Extract the short ID from vm.tiktok.com
+            short_id = tiktok_url.split("vm.tiktok.com/")[-1].rstrip("/").split("?")[0]
+            
+            # For now, we'll skip the API call and go directly to database search
+            # The ScrapTik video-info endpoint might not be available
+            video_id = short_id  # Use short ID for database search
+                
+        # Handle full URLs like www.tiktok.com/@username/video/12345
+        elif "/video/" in tiktok_url:
+            video_id = tiktok_url.split("/video/")[-1].split("?")[0].split("/")[0]
+        elif "@" in tiktok_url and "/video/" in tiktok_url:
+            video_id = tiktok_url.split("/video/")[-1].split("?")[0]
+        
+        if not video_id:
+            return VideoTranscriptionResponse(
+                success=False,
+                message="Não foi possível extrair o ID do vídeo da URL fornecida. Tente usar uma URL completa do TikTok."
+            )
+        
+        # Search for video in database using public_video_url
+        video = db.query(TikTokVideo).filter(
+            TikTokVideo.public_video_url.contains(video_id)
+        ).first()
+        
+        if not video:
+            # Try searching by tiktok_video_id as fallback
+            video = db.query(TikTokVideo).filter(
+                TikTokVideo.tiktok_video_id == video_id
             ).first()
+        
+        # If still not found and we have a short URL, try broader search
+        if not video and "vm.tiktok.com/" in tiktok_url:
+            short_id = tiktok_url.split("vm.tiktok.com/")[-1].rstrip("/").split("?")[0]
+            # Try to find video by searching for the short ID in any URL field
+            video = db.query(TikTokVideo).filter(
+                TikTokVideo.public_video_url.contains(short_id)
+            ).first()
+        
+        if not video:
+            return VideoTranscriptionResponse(
+                success=True,
+                message="Este vídeo não é de um influenciador cadastrado.",
+                video_found=False,
+                is_influencer_video=False
+            )
+        
+        # Video found and it's from an influencer
+        if not video.watermark_free_url:
+            return VideoTranscriptionResponse(
+                success=False,
+                message="URL do vídeo sem marca d'água não disponível.",
+                video_found=True,
+                is_influencer_video=True,
+                eldorado_username=video.eldorado_username
+            )
+        
+        # Check if transcription already exists
+        if video.transcription:
+            return VideoTranscriptionResponse(
+                success=True,
+                message="Transcrição já existe (cache)!",
+                video_found=True,
+                is_influencer_video=True,
+                eldorado_username=video.eldorado_username,
+                transcription=video.transcription,
+                video_info=TikTokVideoResponse.model_validate(video)
+            )
+        
+        # Transcribe video using OpenAI
+        openai_service = OpenAIService()
+        
+        try:
+            transcription = openai_service.transcribe_from_url(video.watermark_free_url)
             
-            if not influencer_ids or not influencer_ids.tiktok_username:
-                results.append(VideoSyncResponse(
-                    success=False,
-                    message=f"No TikTok username for {influencer.eldorado_username}",
-                    videos_processed=0,
-                    new_videos=0,
-                    updated_videos=0,
-                    errors=[f"Missing TikTok username"]
-                ))
-                continue
-            
-            # Sync videos for this influencer
-            scraptik = ScrapTikService()
-            sponsored_videos = scraptik.get_eldorado_videos(influencer_ids.tiktok_username)
-            
-            new_videos = 0
-            updated_videos = 0
-            errors = []
-            
-            for video_data in sponsored_videos:
-                try:
-                    existing_video = db.query(TikTokVideo).filter(
-                        TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
-                    ).first()
-                    
-                    if existing_video:
-                        existing_video.view_count = video_data['view_count']
-                        existing_video.like_count = video_data['like_count']
-                        existing_video.comment_count = video_data['comment_count']
-                        existing_video.share_count = video_data['share_count']
-                        updated_videos += 1
-                    else:
-                        new_video = TikTokVideo(
-                            eldorado_username=influencer.eldorado_username,
-                            tiktok_username=influencer_ids.tiktok_username,
-                            tiktok_video_id=video_data['tiktok_video_id'],
-                            description=video_data['description'],
-                            view_count=video_data['view_count'],
-                            like_count=video_data['like_count'],
-                            comment_count=video_data['comment_count'],
-                            share_count=video_data['share_count'],
-                            public_video_url=video_data['public_video_url'],
-                            watermark_free_url=video_data['watermark_free_url'],
-                            published_at=video_data['published_at']
-                        )
-                        db.add(new_video)
-                        new_videos += 1
-                        
-                except Exception as e:
-                    errors.append(f"Video {video_data.get('tiktok_video_id', 'unknown')}: {str(e)}")
-            
+            # Save transcription to database
+            video.transcription = transcription
             db.commit()
             
-            results.append(VideoSyncResponse(
+            return VideoTranscriptionResponse(
                 success=True,
-                message=f"Sync completed for {influencer.eldorado_username}",
-                videos_processed=len(sponsored_videos),
-                new_videos=new_videos,
-                updated_videos=updated_videos,
-                errors=errors
-            ))
+                message="Transcrição realizada com sucesso!",
+                video_found=True,
+                is_influencer_video=True,
+                eldorado_username=video.eldorado_username,
+                transcription=transcription,
+                video_info=TikTokVideoResponse.model_validate(video)
+            )
             
         except Exception as e:
-            db.rollback()
-            results.append(VideoSyncResponse(
+            return VideoTranscriptionResponse(
                 success=False,
-                message=f"Error syncing {influencer.eldorado_username}: {str(e)}",
-                videos_processed=0,
-                new_videos=0,
-                updated_videos=0,
-                errors=[str(e)]
-            ))
+                message=f"Erro na transcrição: {str(e)}",
+                video_found=True,
+                is_influencer_video=True,
+                eldorado_username=video.eldorado_username
+            )
     
-    return results
+    except Exception as e:
+        return VideoTranscriptionResponse(
+            success=False,
+            message=f"Erro interno: {str(e)}"
+        )

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     rapidapi_key: str = "your_rapidapi_key_here"
     rapidapi_host: str = "scraptik.p.rapidapi.com"
     
+    # OpenAI
+    openai_api_key: str = "your_openai_api_key_here"
+    
     # Security
     secret_key: str = "your-secret-key-here"
     algorithm: str = "HS256"
