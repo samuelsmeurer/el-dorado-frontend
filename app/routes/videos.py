@@ -87,7 +87,6 @@ def sync_all_influencers_videos(
             
             for video_data in sponsored_videos:
                 try:
-                    print(f"[DEBUG] Sync-all: Processando video_data para {video_data['tiktok_video_id']}: alt1 presente={('watermark_free_url_alt1' in video_data and video_data['watermark_free_url_alt1'] is not None)} alt2 presente={('watermark_free_url_alt2' in video_data and video_data['watermark_free_url_alt2'] is not None)}")
                     existing_video = db.query(TikTokVideo).filter(
                         TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
                     ).first()
@@ -105,9 +104,6 @@ def sync_all_influencers_videos(
                         existing_video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
                         existing_video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
                         
-                        print(f"[DEBUG] Sync-all: Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
-                        
-                        print(f"[DEBUG] Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
                         updated_videos += 1
                     else:
                         new_video = TikTokVideo(
@@ -202,13 +198,10 @@ def sync_influencer_videos(
     
     for video_data in sponsored_videos:
         try:
-            print(f"[DEBUG] Processando video_data para {video_data['tiktok_video_id']}: alt1 presente={('watermark_free_url_alt1' in video_data and video_data['watermark_free_url_alt1'] is not None)} alt2 presente={('watermark_free_url_alt2' in video_data and video_data['watermark_free_url_alt2'] is not None)}")
             # Check if video already exists
             existing_video = db.query(TikTokVideo).filter(
                 TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
             ).first()
-            
-            print(f"[DEBUG] Video {video_data['tiktok_video_id']}: existing_video encontrado = {bool(existing_video)}")
             
             if existing_video:
                 # UPDATE existing video metrics
@@ -223,7 +216,6 @@ def sync_influencer_videos(
                 existing_video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
                 existing_video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
                 
-                print(f"[DEBUG] Individual: Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
                 updated_videos += 1
             else:
                 # INSERT new sponsored video
@@ -329,11 +321,32 @@ def transcribe_video_from_url(
                 is_influencer_video=False
             )
         
-        # Video found and it's from an influencer
+        # Video found - ALWAYS sync videos first to get fresh URLs
+        print(f"[DEBUG] Sincronizando vídeos para {video.eldorado_username} antes da transcrição...")
+        try:
+            scraptik = ScrapTikService()
+            sponsored_videos = scraptik.get_eldorado_videos(video.tiktok_username)
+            
+            # Update the specific video with fresh URLs if found
+            for video_data in sponsored_videos:
+                if video_data['tiktok_video_id'] == video.tiktok_video_id:
+                    video.watermark_free_url = video_data['watermark_free_url']
+                    video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
+                    video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
+                    db.commit()
+                    print(f"[DEBUG] URLs atualizados para vídeo {video.tiktok_video_id}")
+                    break
+        except Exception as sync_error:
+            print(f"[DEBUG] Erro na sincronização prévia: {sync_error}")
+            # Continue mesmo se a sincronização falhar
+        
+        # Refresh video object to get updated URLs
+        db.refresh(video)
+        
         if not video.watermark_free_url:
             return VideoTranscriptionResponse(
                 success=False,
-                message="URL do vídeo sem marca d'água não disponível.",
+                message="URL do vídeo sem marca d'água não disponível mesmo após sincronização.",
                 video_found=True,
                 is_influencer_video=True,
                 eldorado_username=video.eldorado_username
@@ -355,60 +368,55 @@ def transcribe_video_from_url(
         openai_service = OpenAIService()
         
         try:
-            # Try multiple URLs in order: primary, alt1, alt2
+            # Try multiple URLs in cascata: primary, alt1, alt2
             transcription = None
-            urls_to_try = [("primary", video.watermark_free_url)]
+            urls_to_try = []
             
-            # Add alternative URLs if they exist (columns may not exist yet)
-            try:
-                if hasattr(video, 'watermark_free_url_alt1') and video.watermark_free_url_alt1:
-                    urls_to_try.append(("alt1", video.watermark_free_url_alt1))
-                if hasattr(video, 'watermark_free_url_alt2') and video.watermark_free_url_alt2:
-                    urls_to_try.append(("alt2", video.watermark_free_url_alt2))
-            except Exception as e:
-                print(f"[DEBUG] Colunas alternativas ainda não existem: {e}")
-                print(f"[DEBUG] Usando apenas URL principal por enquanto")
+            # Build list of URLs to try in order
+            if video.watermark_free_url:
+                urls_to_try.append(("primary", video.watermark_free_url))
+            if hasattr(video, 'watermark_free_url_alt1') and video.watermark_free_url_alt1:
+                urls_to_try.append(("alt1", video.watermark_free_url_alt1))
+            if hasattr(video, 'watermark_free_url_alt2') and video.watermark_free_url_alt2:
+                urls_to_try.append(("alt2", video.watermark_free_url_alt2))
+            
+            print(f"[DEBUG] Testando {len(urls_to_try)} URLs em cascata...")
             
             last_error = None
+            errors_by_url = {}
+            
             for url_type, video_url in urls_to_try:
-                if not video_url:  # Skip if URL is None
-                    continue
-                    
                 try:
                     print(f"[DEBUG] Tentando URL {url_type}: {video_url[:50]}...")
                     transcription = openai_service.transcribe_from_url(video_url)
-                    print(f"[DEBUG] Sucesso com URL {url_type}!")
+                    print(f"[DEBUG] SUCESSO com URL {url_type}!")
                     break  # Success, exit loop
                     
                 except Exception as url_error:
-                    print(f"[DEBUG] Falha com URL {url_type}: {str(url_error)}")
+                    error_msg = str(url_error)
+                    print(f"[DEBUG] FALHA com URL {url_type}: {error_msg}")
+                    errors_by_url[url_type] = error_msg
                     last_error = url_error
                     continue  # Try next URL
             
-            # If we get here without transcription, all URLs failed
+            # If we get here without transcription, ALL URLs failed
             if transcription is None:
-                # If we get 403, try to sync videos to get fresh URLs
-                if last_error and "403" in str(last_error):
-                    print(f"[DEBUG] Todos URLs falharam com 403, tentando sincronizar...")
-                    try:
-                        # Call sync videos for this influencer  
-                        from ..services.tiktok_service import TikTokService
-                        tiktok_service = TikTokService()
-                        sync_result = tiktok_service.sync_videos_for_influencer(video.eldorado_username)
-                        print(f"[DEBUG] Sync concluído: {sync_result}")
-                        
-                        # Refresh video and try primary URL again
-                        db.refresh(video)
-                        if video.watermark_free_url:
-                            transcription = openai_service.transcribe_from_url(video.watermark_free_url)
-                        else:
-                            raise Exception("URLs expiraram após sincronização. Tente novamente em alguns minutos.")
-                    except Exception as sync_error:
-                        print(f"[DEBUG] Erro na sincronização: {sync_error}")
-                        raise Exception("URLs expiraram e não foi possível sincronizar. Tente novamente em alguns minutos.")
-                else:
-                    # Non-403 error, raise the last error
-                    raise last_error
+                # Create detailed error message showing all failed attempts
+                error_details = []
+                for url_type, error_msg in errors_by_url.items():
+                    error_details.append(f"{url_type}: {error_msg}")
+                
+                detailed_error = f"Todos os {len(urls_to_try)} URLs falharam:\n" + "\n".join(error_details)
+                print(f"[DEBUG] {detailed_error}")
+                
+                # Return comprehensive error response
+                return VideoTranscriptionResponse(
+                    success=False,
+                    message=f"Não foi possível transcrever o vídeo. Todos os URLs falharam mesmo após sincronização. Últimos erros: {'; '.join([f'{k}={v}' for k, v in errors_by_url.items()])}",
+                    video_found=True,
+                    is_influencer_video=True,
+                    eldorado_username=video.eldorado_username
+                )
             
             # Save transcription to database
             video.transcription = transcription
