@@ -23,6 +23,8 @@ class TikTokVideo(Base):
     # URLs
     public_video_url = Column(String(1000))
     watermark_free_url = Column(String(1000))
+    watermark_free_url_alt1 = Column(String(1000))
+    watermark_free_url_alt2 = Column(String(1000))
     
     # Transcription
     transcription = Column(Text, nullable=True)

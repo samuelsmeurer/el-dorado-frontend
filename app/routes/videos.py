@@ -109,6 +109,8 @@ def sync_all_influencers_videos(
                             share_count=video_data['share_count'],
                             public_video_url=video_data['public_video_url'],
                             watermark_free_url=video_data['watermark_free_url'],
+                            watermark_free_url_alt1=video_data.get('watermark_free_url_alt1'),
+                            watermark_free_url_alt2=video_data.get('watermark_free_url_alt2'),
                             published_at=video_data['published_at']
                         )
                         db.add(new_video)
@@ -213,6 +215,8 @@ def sync_influencer_videos(
                     share_count=video_data['share_count'],
                     public_video_url=video_data['public_video_url'],
                     watermark_free_url=video_data['watermark_free_url'],
+                    watermark_free_url_alt1=video_data.get('watermark_free_url_alt1'),
+                    watermark_free_url_alt2=video_data.get('watermark_free_url_alt2'),
                     published_at=video_data['published_at']
                 )
                 db.add(new_video)
@@ -328,52 +332,54 @@ def transcribe_video_from_url(
         openai_service = OpenAIService()
         
         try:
-            # First try with stored URL
+            # Try multiple URLs in order: primary, alt1, alt2
             transcription = None
-            video_url_to_use = video.watermark_free_url
+            urls_to_try = [
+                ("primary", video.watermark_free_url),
+                ("alt1", video.watermark_free_url_alt1), 
+                ("alt2", video.watermark_free_url_alt2)
+            ]
             
-            try:
-                transcription = openai_service.transcribe_from_url(video_url_to_use)
-            except Exception as first_error:
-                # If we get 403, sync videos to get fresh URLs
-                if "403" in str(first_error):
-                    print(f"[DEBUG] Erro 403 com URL armazenada, sincronizando vídeos...")
+            last_error = None
+            for url_type, video_url in urls_to_try:
+                if not video_url:  # Skip if URL is None
+                    continue
                     
+                try:
+                    print(f"[DEBUG] Tentando URL {url_type}: {video_url[:50]}...")
+                    transcription = openai_service.transcribe_from_url(video_url)
+                    print(f"[DEBUG] Sucesso com URL {url_type}!")
+                    break  # Success, exit loop
+                    
+                except Exception as url_error:
+                    print(f"[DEBUG] Falha com URL {url_type}: {str(url_error)}")
+                    last_error = url_error
+                    continue  # Try next URL
+            
+            # If we get here without transcription, all URLs failed
+            if transcription is None:
+                # If we get 403, try to sync videos to get fresh URLs
+                if last_error and "403" in str(last_error):
+                    print(f"[DEBUG] Todos URLs falharam com 403, tentando sincronizar...")
                     try:
-                        # Call sync videos for this influencer
+                        # Call sync videos for this influencer  
                         from ..services.tiktok_service import TikTokService
                         tiktok_service = TikTokService()
-                        
-                        # Sync videos for this influencer
                         sync_result = tiktok_service.sync_videos_for_influencer(video.eldorado_username)
                         print(f"[DEBUG] Sync concluído: {sync_result}")
                         
-                        # Refresh video from database to get updated URL
+                        # Refresh video and try primary URL again
                         db.refresh(video)
-                        
-                        if video.watermark_free_url != video_url_to_use:
-                            print(f"[DEBUG] URL atualizada, tentando novamente...")
+                        if video.watermark_free_url:
                             transcription = openai_service.transcribe_from_url(video.watermark_free_url)
                         else:
-                            # URL didn't change, try with fresh URL extraction
-                            fresh_url = openai_service.get_fresh_video_url(video.public_video_url)
-                            if fresh_url:
-                                print(f"[DEBUG] Tentando com URL extraída da página...")
-                                transcription = openai_service.transcribe_from_url(fresh_url)
-                            else:
-                                raise Exception("URLs expiraram. Tente novamente em alguns minutos.")
-                        
+                            raise Exception("URLs expiraram após sincronização. Tente novamente em alguns minutos.")
                     except Exception as sync_error:
                         print(f"[DEBUG] Erro na sincronização: {sync_error}")
-                        # Last resort: try extracting fresh URL from page
-                        fresh_url = openai_service.get_fresh_video_url(video.public_video_url)
-                        if fresh_url:
-                            print(f"[DEBUG] Tentando com URL extraída da página...")
-                            transcription = openai_service.transcribe_from_url(fresh_url)
-                        else:
-                            raise Exception("URLs expiraram e não foi possível sincronizar. Tente novamente em alguns minutos.")
+                        raise Exception("URLs expiraram e não foi possível sincronizar. Tente novamente em alguns minutos.")
                 else:
-                    raise first_error
+                    # Non-403 error, raise the last error
+                    raise last_error
             
             # Save transcription to database
             video.transcription = transcription

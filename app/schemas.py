@@ -102,6 +102,8 @@ class TikTokVideoResponse(BaseModel):
     share_count: int
     public_video_url: Optional[str] = None
     watermark_free_url: Optional[str] = None
+    watermark_free_url_alt1: Optional[str] = None
+    watermark_free_url_alt2: Optional[str] = None
     transcription: Optional[str] = None
     published_at: Optional[datetime] = None
     created_at: datetime

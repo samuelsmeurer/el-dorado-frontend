@@ -119,9 +119,14 @@ class ScrapTikService:
                 # Extract URLs (try different possible paths)
                 video_urls = video.get('video', {})
                 download_url = None
+                download_url_alt1 = None
+                download_url_alt2 = None
+                
                 if 'play_addr' in video_urls:
                     url_list = video_urls['play_addr'].get('url_list', [])
-                    download_url = url_list[0] if url_list else None
+                    download_url = url_list[0] if len(url_list) > 0 else None
+                    download_url_alt1 = url_list[1] if len(url_list) > 1 else None
+                    download_url_alt2 = url_list[2] if len(url_list) > 2 else None
                 elif 'download_addr' in video_urls:
                     download_url = video_urls.get('download_addr')
                 
@@ -137,7 +142,9 @@ class ScrapTikService:
                     'comment_count': statistics.get('comment_count', 0),
                     'share_count': statistics.get('share_count', 0),
                     'public_video_url': web_url,
-                    'watermark_free_url': download_url
+                    'watermark_free_url': download_url,
+                    'watermark_free_url_alt1': download_url_alt1,
+                    'watermark_free_url_alt2': download_url_alt2
                 }
                 
                 sponsored_videos.append(sponsored_video)
