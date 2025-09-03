@@ -1,9 +1,11 @@
 # Use Python 3.11 slim image
 FROM python:3.11-slim
 
-# Install system dependencies including FFmpeg
+# Install system dependencies including FFmpeg and PostgreSQL dev headers
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    libpq-dev \
+    gcc \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
