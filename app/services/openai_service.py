@@ -87,28 +87,20 @@ class OpenAIService:
             raise Exception(f"Erro na transcrição streaming: {str(e)}")
     
     def transcribe_from_url(self, video_url: str) -> str:
-        """Try streaming first, fallback to download if needed"""
+        """Download video to disk and transcribe (more reliable than streaming)"""
+        video_path = None
         try:
-            # Try streaming approach first (no disk usage)
-            return self.transcribe_from_url_streaming(video_url)
+            # Download video to temporary file
+            video_path = self.download_video(video_url)
             
-        except Exception as streaming_error:
-            print(f"Streaming failed: {streaming_error}, trying download method...")
+            # Transcribe from downloaded file
+            return self.transcribe_video(video_path)
             
-            # Fallback to download method
-            video_path = None
-            try:
-                # Download video
-                video_path = self.download_video(video_url)
-                
-                # Transcribe
-                return self.transcribe_video(video_path)
-                
-            except Exception as download_error:
-                # Clean up in case of error
-                if video_path and os.path.exists(video_path):
-                    try:
-                        os.unlink(video_path)
-                    except:
-                        pass
-                raise Exception(f"Ambos métodos falharam - Streaming: {streaming_error}, Download: {download_error}")
+        except Exception as e:
+            # Clean up in case of error
+            if video_path and os.path.exists(video_path):
+                try:
+                    os.unlink(video_path)
+                except:
+                    pass
+            raise Exception(f"Erro no download e transcrição: {str(e)}")
