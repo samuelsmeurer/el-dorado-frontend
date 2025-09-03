@@ -169,6 +169,8 @@ class ScrapTikService:
                     'watermark_free_url_alt2': download_url_alt2
                 }
                 
+                print(f"[DEBUG] Video {video_id}: sponsored_video criado com alt1={bool(download_url_alt1)} alt2={bool(download_url_alt2)}")
+                
                 sponsored_videos.append(sponsored_video)
                 
             except Exception as e:

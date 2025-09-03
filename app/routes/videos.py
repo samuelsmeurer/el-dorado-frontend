@@ -87,6 +87,7 @@ def sync_all_influencers_videos(
             
             for video_data in sponsored_videos:
                 try:
+                    print(f"[DEBUG] Sync-all: Processando video_data para {video_data['tiktok_video_id']}: alt1 presente={('watermark_free_url_alt1' in video_data and video_data['watermark_free_url_alt1'] is not None)} alt2 presente={('watermark_free_url_alt2' in video_data and video_data['watermark_free_url_alt2'] is not None)}")
                     existing_video = db.query(TikTokVideo).filter(
                         TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
                     ).first()
@@ -103,6 +104,10 @@ def sync_all_influencers_videos(
                         existing_video.watermark_free_url = video_data['watermark_free_url']
                         existing_video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
                         existing_video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
+                        
+                        print(f"[DEBUG] Sync-all: Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
+                        
+                        print(f"[DEBUG] Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
                         updated_videos += 1
                     else:
                         new_video = TikTokVideo(
@@ -197,10 +202,13 @@ def sync_influencer_videos(
     
     for video_data in sponsored_videos:
         try:
+            print(f"[DEBUG] Processando video_data para {video_data['tiktok_video_id']}: alt1 presente={('watermark_free_url_alt1' in video_data and video_data['watermark_free_url_alt1'] is not None)} alt2 presente={('watermark_free_url_alt2' in video_data and video_data['watermark_free_url_alt2'] is not None)}")
             # Check if video already exists
             existing_video = db.query(TikTokVideo).filter(
                 TikTokVideo.tiktok_video_id == video_data['tiktok_video_id']
             ).first()
+            
+            print(f"[DEBUG] Video {video_data['tiktok_video_id']}: existing_video encontrado = {bool(existing_video)}")
             
             if existing_video:
                 # UPDATE existing video metrics
@@ -208,6 +216,14 @@ def sync_influencer_videos(
                 existing_video.like_count = video_data['like_count']
                 existing_video.comment_count = video_data['comment_count']
                 existing_video.share_count = video_data['share_count']
+                
+                # Always update URLs (they might have changed)
+                existing_video.public_video_url = video_data['public_video_url']
+                existing_video.watermark_free_url = video_data['watermark_free_url']
+                existing_video.watermark_free_url_alt1 = video_data.get('watermark_free_url_alt1')
+                existing_video.watermark_free_url_alt2 = video_data.get('watermark_free_url_alt2')
+                
+                print(f"[DEBUG] Individual: Atualizando video {video_data['tiktok_video_id']}: alt1={bool(existing_video.watermark_free_url_alt1)} alt2={bool(existing_video.watermark_free_url_alt2)}")
                 updated_videos += 1
             else:
                 # INSERT new sponsored video
