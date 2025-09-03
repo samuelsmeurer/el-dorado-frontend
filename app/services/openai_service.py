@@ -22,25 +22,69 @@ class OpenAIService:
     def download_video(self, video_url: str) -> str:
         """Download video to temporary file and return file path"""
         try:
+            # Enhanced headers to bypass TikTok restrictions
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'video/mp4,video/*,*/*;q=0.9',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
+                'Accept-Encoding': 'identity',  # Don't use compression to avoid issues
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'video',
+                'Sec-Fetch-Mode': 'no-cors',
+                'Sec-Fetch-Site': 'cross-site',
+                'Range': 'bytes=0-'  # Request full range
             }
-            response = requests.get(video_url, stream=True, timeout=120, headers=headers)
-            response.raise_for_status()
             
-            # Create temporary file
-            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
-                for chunk in response.iter_content(chunk_size=8192):
-                    tmp_file.write(chunk)
-                return tmp_file.name
-                
+            # Try multiple attempts with different strategies
+            for attempt in range(3):
+                try:
+                    print(f"[DEBUG] Tentativa {attempt + 1} de download: {video_url}")
+                    
+                    # Use session to maintain cookies
+                    session = requests.Session()
+                    session.headers.update(headers)
+                    
+                    response = session.get(video_url, stream=True, timeout=120, allow_redirects=True)
+                    
+                    if response.status_code == 403:
+                        print(f"[DEBUG] 403 na tentativa {attempt + 1}, tentando com headers diferentes...")
+                        if attempt < 2:  # Try different user agent on retry
+                            headers['User-Agent'] = f'TikTok 26.1.0 rv:261013 (iPhone; iOS 16.6; en_US) Cronet'
+                            continue
+                    
+                    response.raise_for_status()
+                    
+                    # Check if we got actual video content
+                    content_type = response.headers.get('content-type', '')
+                    if 'video' not in content_type and 'octet-stream' not in content_type:
+                        print(f"[DEBUG] Content-Type inesperado: {content_type}")
+                    
+                    # Create temporary file
+                    with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp_file:
+                        total_size = 0
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:  # Filter out keep-alive chunks
+                                tmp_file.write(chunk)
+                                total_size += len(chunk)
+                        
+                        print(f"[DEBUG] Download concluído: {total_size} bytes")
+                        return tmp_file.name
+                        
+                except requests.exceptions.RequestException as req_error:
+                    print(f"[DEBUG] Erro na tentativa {attempt + 1}: {req_error}")
+                    if attempt == 2:  # Last attempt
+                        raise req_error
+                    continue
+                    
         except Exception as e:
-            raise Exception(f"Erro ao baixar vídeo: {str(e)}")
+            error_msg = str(e)
+            if "403" in error_msg:
+                raise Exception(f"Erro 403: Acesso negado pelo TikTok. O link pode ter expirado ou estar protegido. Tente com um vídeo mais recente.")
+            elif "404" in error_msg:
+                raise Exception(f"Erro 404: Vídeo não encontrado. Verifique se o link está correto.")
+            else:
+                raise Exception(f"Erro ao baixar vídeo: {error_msg}")
     
     def extract_audio_from_video(self, video_path: str) -> str:
         """Extract audio from video to reduce file size"""
@@ -160,14 +204,17 @@ class OpenAIService:
     def transcribe_from_url_streaming(self, video_url: str) -> str:
         """Stream video directly to OpenAI without saving to disk"""
         try:
-            # Download video to memory with proper headers
+            # Download video to memory with enhanced headers
             headers = {
-                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                'Accept': 'video/mp4,video/*,*/*;q=0.9',
+                'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1',
+                'Accept': '*/*',
                 'Accept-Language': 'en-US,en;q=0.9',
-                'Accept-Encoding': 'gzip, deflate, br',
+                'Accept-Encoding': 'identity',
                 'Connection': 'keep-alive',
-                'Upgrade-Insecure-Requests': '1'
+                'Upgrade-Insecure-Requests': '1',
+                'Sec-Fetch-Dest': 'video',
+                'Sec-Fetch-Mode': 'no-cors',
+                'Sec-Fetch-Site': 'cross-site'
             }
             response = requests.get(video_url, timeout=120, headers=headers)
             response.raise_for_status()
